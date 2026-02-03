@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@layer base {
+  @theme {
+    /* This defines the dark mode trigger */
+    --font-sans: "Inter", ui-sans-serif, system-ui;
+  }
+}
+
+/* Tell Tailwind to look for the .dark class on the html element */
+@custom-variant dark (&:where(.dark, .dark *));
