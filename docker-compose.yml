@@ -1,0 +1,35 @@
+services:
+  # Database Service
+  db:
+    image: pgvector/pgvector:pg15
+    container_name: cpslyse_db
+    environment:
+      # These variables are required by the official Postgres image
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  # FastAPI Service
+  backend:
+    build: ./backend
+    container_name: cpslyse_api
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    environment:
+      # Passing the env variables into the Python container
+      - PG_HOST=${PG_HOST}
+      - PG_DB=${DB_NAME}
+      - PG_USER=${DB_USER}
+      - PG_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./backend:/code
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  pg_data:
