@@ -1,81 +1,34 @@
 import os
-import time
-import psycopg2
-from psycopg2.extras import RealDictCursor
+from pymongo import MongoClient
 from dotenv import load_dotenv
 
-load_dotenv()
+from pathlib import Path
 
-def get_pg_connection():
-    """Returns a connection object for PostgreSQL."""
-    return psycopg2.connect(
-        host=os.getenv("PG_HOST", "db"),
-        database=os.getenv("PG_DB", "cpslyse_db"),
-        user=os.getenv("PG_USER", "user_admin"),
-        password=os.getenv("PG_PASSWORD", "password123")
-    )
+env_path = Path(__file__).resolve().parent.parent.parent / '.env'
+if not env_path.exists():
+    env_path = Path(__file__).resolve().parent.parent / '.env'
+load_dotenv(dotenv_path=env_path, override=True)
+
+def get_mongo_uri():
+    user = os.getenv("MONGO_USER", "admin")
+    password = os.getenv("MONGO_PASSWORD", "password123")
+    host = os.getenv("MONGO_HOST", "mongodb")
+    port = os.getenv("MONGO_PORT", "27017")
+    return f"mongodb://{user}:{password}@{host}:{port}/?authSource=admin"
+
+def get_db():
+    client = MongoClient(get_mongo_uri())
+    db_name = os.getenv("MONGO_DB", "cpslyse_db")
+    return client[db_name]
 
 def init_db():
-    """Initializes the database schema for legal RAG analysis."""
-    retries = 5
-    while retries > 0:
-        try:
-            conn = get_pg_connection()
-            cur = conn.cursor()
-            
-            # --- 1. ENABLE VECTOR EXTENSION ---
-            # This is mandatory for storing AI embeddings
-            cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-            
-            # --- 2. DECREE REFERENCE TABLE (The Law) ---
-            # We store the 'Decret' here. It acts as the benchmark.
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS decret_reference (
-                    id SERIAL PRIMARY KEY,
-                    article_title VARCHAR(255),
-                    content TEXT NOT NULL,
-                    embedding vector(384) -- 384 matches local models like all-MiniLM-L6-v2
-                );
-            """)
-
-            # --- 3. CPS ARTICLES TABLE (The Uploaded Document) ---
-            # We store the Tesseract output here, split by article.
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS cps_articles (
-                    id SERIAL PRIMARY KEY,
-                    filename TEXT,
-                    article_number VARCHAR(100),
-                    content TEXT NOT NULL,
-                    page_number INT,
-                    embedding vector(384),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-            """)
-
-            # --- 4. GAP ANALYSIS RESULTS (The AI Findings) ---
-            # This stores Step 5: Keywords/clauses missing or illegal.
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS legal_mismatches (
-                    id SERIAL PRIMARY KEY,
-                    cps_article_id INT REFERENCES cps_articles(id) ON DELETE CASCADE,
-                    decret_article_id INT REFERENCES decret_reference(id),
-                    issue_type VARCHAR(50), -- e.g., 'Contradiction', 'Omission', 'Keyword'
-                    detected_keyword VARCHAR(255),
-                    description TEXT,        -- The AI's explanation
-                    severity VARCHAR(20) DEFAULT 'Warning'
-                );
-            """)
-
-            conn.commit()
-            cur.close()
-            conn.close()
-            print("✅ Database initialized with Vector support.")
-            break
-            
-        except Exception as e:
-            print(f"🔄 Waiting for Database... ({e})")
-            retries -= 1
-            time.sleep(3)
+    print("Initializing MongoDB connection...")
+    try:
+        client = MongoClient(get_mongo_uri(), serverSelectionTimeoutMS=5000)
+        client.admin.command('ping')
+        print("MongoDB connection successful.")
+    except Exception as e:
+        print(f"MongoDB connection failed: {e}")
 
 if __name__ == "__main__":
     init_db()

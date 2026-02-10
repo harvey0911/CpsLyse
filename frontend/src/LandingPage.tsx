@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search, Download, FileCheck, Moon, Sun } from 'lucide-react';
+import { Upload, FileText, Loader2, Search, Download, FileCheck, Moon, Sun } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -15,7 +15,7 @@ const LandingPage: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
-  
+
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('theme');
     if (saved) return saved === 'dark';
@@ -33,55 +33,80 @@ const LandingPage: React.FC = () => {
     }
   }, [isDark]);
 
-  // --- PDF GENERATION LOGIC ---
   const generatePDF = () => {
     if (!analysisResult) return;
-    
+
     const doc = new jsPDF();
-    
-    // Header
+
     doc.setFontSize(20);
-    doc.setTextColor(37, 99, 235); // Blue 600
+    doc.setTextColor(37, 99, 235);
     doc.text("CpsLyse - Rapport d'Audit Juridique", 14, 20);
-    
-    // Metadata
+
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.text(`Document analysé: ${analysisResult.fileName}`, 14, 30);
     doc.text(`Score de conformité: ${analysisResult.complianceScore}`, 14, 35);
     doc.text(`Date de l'audit: ${new Date().toLocaleDateString()}`, 14, 40);
 
-    // Table
     autoTable(doc, {
       startY: 50,
       head: [['Clause du CPS', 'Référence Décret', 'Statut']],
       body: analysisResult.details.map((item: any) => [
-        item.clause, 
-        item.ref, 
+        item.clause,
+        item.ref,
         item.status
       ]),
-      headStyles: { fillColor: [30, 41, 59] }, // Slate 800
+      headStyles: { fillColor: [30, 41, 59] },
       styles: { fontSize: 9, cellPadding: 5 },
       columnStyles: {
-        0: { cellWidth: 120 }, // Wider for the clause text
+        0: { cellWidth: 120 },
       }
     });
 
     doc.save(`Audit_CpsLyse_${analysisResult.fileName.replace('.pdf', '')}.pdf`);
   };
 
-  const handleSimulatedUpload = () => {
+  const handleUpload = async () => {
     if (!file) return;
     setLoading(true);
-    setTimeout(() => {
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('http://localhost:8000/api/audit/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+
+      await response.json();
+
       setAnalysisResult({
         fileName: file.name,
-        complianceScore: "78%",
-        specialCount: 2,
-        details: MOCK_RESULTS
+        complianceScore: "En cours...",
+        specialCount: 0,
+        details: []
       });
+
+      setTimeout(() => {
+        setAnalysisResult({
+          fileName: file.name,
+          complianceScore: "78%",
+          specialCount: 2,
+          details: MOCK_RESULTS
+        });
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      alert("Erreur lors de l'envoi du fichier. Vérifiez que le backend tourne.");
+    } finally {
       setLoading(false);
-    }, 2000);
+    }
   };
 
   return (
@@ -91,8 +116,8 @@ const LandingPage: React.FC = () => {
           <div className="bg-blue-600 p-2 rounded-lg text-white"><Search size={20} /></div>
           <h1 className="text-xl font-bold dark:text-white tracking-tight">CpsLyse</h1>
         </div>
-        
-        <button 
+
+        <button
           onClick={() => setIsDark(!isDark)}
           className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-transparent dark:border-slate-700 hover:ring-2 ring-blue-500 transition-all"
         >
@@ -109,8 +134,8 @@ const LandingPage: React.FC = () => {
               <Upload className="text-slate-400 mb-2" size={30} />
               <p className="text-sm text-slate-500 text-center">{file ? file.name : "Sélectionner un fichier PDF"}</p>
             </div>
-            <button 
-              onClick={handleSimulatedUpload}
+            <button
+              onClick={handleUpload}
               disabled={!file || loading}
               className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl disabled:opacity-50 transition-all shadow-lg shadow-blue-200 dark:shadow-none"
             >
@@ -122,8 +147,7 @@ const LandingPage: React.FC = () => {
             <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in slide-in-from-bottom-4">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-semibold">Résumé de l'Audit</h3>
-                {/* PDF BUTTON ADDED HERE */}
-                <button 
+                <button
                   onClick={generatePDF}
                   className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                   title="Télécharger le PDF"
@@ -151,7 +175,7 @@ const LandingPage: React.FC = () => {
               <FileCheck size={18} className="text-blue-600" />
               <span className="font-bold text-sm">RÉSULTATS DÉTAILLÉS</span>
             </div>
-            
+
             <div className="p-6 flex-1">
               {!analysisResult && !loading ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 py-20">
