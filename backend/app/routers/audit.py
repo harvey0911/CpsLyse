@@ -43,11 +43,19 @@ async def upload_file(file: UploadFile = File(...)):
                 art["document_id"] = doc_id
                 art["filename"] = file.filename
                 db.articles.insert_one(art)
+        
+        # Prepare articles for response (convert ObjectIds to strings and remove internal ID)
+        response_articles = []
+        for art in articles:
+            serializable_art = {k: v for k, v in art.items() if k != '_id'}
+            serializable_art["document_id"] = str(doc_id)
+            response_articles.append(serializable_art)
                 
         return {
             "filename": file.filename, 
             "message": f"File processed. {len(articles)} articles extracted.", 
-            "id": str(doc_id)
+            "id": str(doc_id),
+            "articles": response_articles
         }
         
     except Exception as e:

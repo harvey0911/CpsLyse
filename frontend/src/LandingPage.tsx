@@ -3,13 +3,6 @@ import { Upload, FileText, Loader2, Search, Download, FileCheck, Moon, Sun } fro
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const MOCK_RESULTS = [
-  { clause: "Le titulaire doit constituer un cautionnement définitif de 3% du montant initial du marché.", ref: "Art. 12", status: "CONFORME", color: "green" },
-  { clause: "Délai d'exécution fixé à 60 jours calendaires.", ref: "Art. 15", status: "CONFORME", color: "green" },
-  { clause: "Pénalité de retard spécifique de 1% par jour au-delà de 10 jours de retard.", ref: "N/A", status: "SPÉCIFIQUE", color: "amber" },
-  { clause: "L'administration se réserve le droit d'exiger une garantie de maintenance de 24 mois.", ref: "N/A", status: "SPÉCIFIQUE", color: "amber" },
-  { clause: "Révision des prix selon la formule indexée sur l'indice global du bâtiment.", ref: "Art. 44", status: "CONFORME", color: "green" },
-];
 
 const LandingPage: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -66,6 +59,8 @@ const LandingPage: React.FC = () => {
     doc.save(`Audit_CpsLyse_${analysisResult.fileName.replace('.pdf', '')}.pdf`);
   };
 
+  const [expandedArticle, setExpandedArticle] = useState<number | null>(null);
+
   const handleUpload = async () => {
     if (!file) return;
     setLoading(true);
@@ -74,7 +69,8 @@ const LandingPage: React.FC = () => {
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://localhost:8000/api/audit/upload', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/audit/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -83,23 +79,14 @@ const LandingPage: React.FC = () => {
         throw new Error(`Upload failed: ${response.statusText}`);
       }
 
-      await response.json();
+      const data = await response.json();
 
       setAnalysisResult({
         fileName: file.name,
-        complianceScore: "En cours...",
-        specialCount: 0,
-        details: []
+        complianceScore: "En cours...", // To be implemented later with actual analysis
+        specialCount: data.message.includes("articles extracted") ? parseInt(data.message.split(" ")[2]) : 0,
+        details: data.articles || [] // Assuming backend returns 'articles' key with list
       });
-
-      setTimeout(() => {
-        setAnalysisResult({
-          fileName: file.name,
-          complianceScore: "78%",
-          specialCount: 2,
-          details: MOCK_RESULTS
-        });
-      }, 1000);
 
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -134,13 +121,15 @@ const LandingPage: React.FC = () => {
               <Upload className="text-slate-400 mb-2" size={30} />
               <p className="text-sm text-slate-500 text-center">{file ? file.name : "Sélectionner un fichier PDF"}</p>
             </div>
-            <button
-              onClick={handleUpload}
-              disabled={!file || loading}
-              className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl disabled:opacity-50 transition-all shadow-lg shadow-blue-200 dark:shadow-none"
-            >
-              {loading ? <Loader2 className="animate-spin mx-auto" size={20} /> : "Analyser le document"}
-            </button>
+            <div className="mt-4">
+              <button
+                onClick={() => handleUpload()}
+                disabled={!file || loading}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl disabled:opacity-50 transition-all shadow-lg shadow-blue-200 dark:shadow-none"
+              >
+                {loading ? <Loader2 className="animate-spin mx-auto" size={20} /> : "Analyser CPS"}
+              </button>
+            </div>
           </div>
 
           {analysisResult && (
@@ -192,24 +181,40 @@ const LandingPage: React.FC = () => {
                   <table className="w-full text-left">
                     <thead>
                       <tr className="text-[10px] text-slate-400 uppercase tracking-widest">
-                        <th className="pb-4">Clause</th>
-                        <th className="pb-4">Réf. Décret</th>
-                        <th className="pb-4">Statut</th>
+                        <th className="pb-4 w-24">Article</th>
+                        <th className="pb-4">Contenu</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {analysisResult.details.map((item: any, i: number) => (
-                        <tr key={i} className="group hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                          <td className="py-4 pr-4 text-sm leading-relaxed">{item.clause}</td>
-                          <td className="py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-mono">{item.ref}</span>
-                          </td>
-                          <td className="py-4">
-                            <span className={`px-2 py-1 rounded text-[10px] font-bold ${item.color === 'green' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'}`}>
-                              {item.status}
-                            </span>
-                          </td>
-                        </tr>
+                        <React.Fragment key={i}>
+                          <tr
+                            className="group hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
+                            onClick={() => setExpandedArticle(expandedArticle === i ? null : i)}
+                          >
+                            <td className="py-4 pr-4 whitespace-nowrap align-top">
+                              <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-mono font-bold">
+                                {item.article_number || "N/A"}
+                              </span>
+                            </td>
+                            <td className="py-4 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                              <div className={expandedArticle === i ? "" : "line-clamp-3 text-ellipsis overflow-hidden"}>
+                                {item.content}
+                              </div>
+                              {item.content && item.content.length > 200 && (
+                                <button
+                                  className="mt-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedArticle(expandedArticle === i ? null : i);
+                                  }}
+                                >
+                                  {expandedArticle === i ? "Voir moins" : "Voir plus"}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>

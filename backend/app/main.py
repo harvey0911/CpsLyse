@@ -37,6 +37,9 @@ app.add_middleware(
 
 app.include_router(audit.router, prefix="/api/audit", tags=["Audit"])
 
+from app.routers import decree
+app.include_router(decree.router, prefix="/api/decree", tags=["Decree"])
+
 @app.get("/")
 def health_check():
     return {
